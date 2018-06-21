@@ -14,8 +14,8 @@ Options:
     -z          直达
 
 Example:
-    tickets 北京 上海 2016-10-10
-    tickets -dg 成都 南京 2016-10-10
+    tickets 武汉 北京 2018-6-21
+    tickets -dg 武汉 北京 2018-6-21
 """
 from docopt import docopt
 
@@ -28,6 +28,8 @@ from colorama import init, Fore
 import gevent
 from urllib.parse import urlencode
 import json
+import time
+import random
 
 
 init()
@@ -90,13 +92,6 @@ class TrainsCollection:
             "seat_types": seat_types,
             "train_date": date
         }
-        url = base_url + urlencode(parmas)
-        try:
-            data = requests.get(url).text
-        except Exception as e:
-            print("获取票价失败"+"|"+e+"|"+url) 
-        data = json.loads(data)
-        data_dic = data["data"]
         price_dic = {
             "business_price": "--",
             "first_seat_price": "--",
@@ -109,38 +104,47 @@ class TrainsCollection:
             "yz_seat_price": "--",
             "wz_seat_price": "--"
         }
-        # 商务座票价
-        if("A9" in data_dic.keys()):
-            price_dic["business_price"] = data_dic["A9"]
-        elif("p" in data_dic.keys()):
-            price_dic["business_price"] = data_dic["p"]
-        # 一等座
-        if("M" in data_dic.keys()):
-            price_dic["first_seat_price"] = data_dic["M"]
-        # 二等座
-        if("O" in data_dic.keys()):
-            price_dic["second_seat_price"] = data_dic["O"]
-        # 高级软卧
-        if("A6" in data_dic.keys()):
-            price_dic["gjrw_seat_price"] = data_dic["A6"]
-        # 软卧
-        if("A4" in data_dic.keys()):
-            price_dic["rw_seat_price"] = data_dic["A4"]
-        # 动卧
-        if("F" in data_dic.keys()):
-            price_dic["dw_seat_price"] = data_dic["F"]
-        # 硬卧
-        if("A3" in data_dic.keys()):
-            price_dic["yw_seat_price"] = data_dic["A3"]
-        # 软座
-        if("A2" in data_dic.keys()):
-            price_dic["rz_seat_price"] = data_dic["A2"]
-        # 硬座
-        if("A1" in data_dic.keys()):
-            price_dic["yz_seat_price"] = data_dic["A1"]
-        # 无座
-        if("WZ" in data_dic.keys()):
-            price_dic["wz_seat_price"] = data_dic["WZ"]
+        url = base_url + urlencode(parmas)
+        #time.sleep(random.uniform(0.2,0.5))
+        response = requests.get(url)
+        if response.status_code == 200:        
+            try:
+                data = requests.get(url).json()
+            except Exception as e:
+                print("获取票价失败"+"|"+e+"|"+url) 
+            data_dic = data["data"]
+            # 商务座票价
+            if("A9" in data_dic.keys()):
+                price_dic["business_price"] = data_dic["A9"]
+            elif("p" in data_dic.keys()):
+                price_dic["business_price"] = data_dic["p"]
+            # 一等座
+            if("M" in data_dic.keys()):
+                price_dic["first_seat_price"] = data_dic["M"]
+            # 二等座
+            if("O" in data_dic.keys()):
+                price_dic["second_seat_price"] = data_dic["O"]
+            # 高级软卧
+            if("A6" in data_dic.keys()):
+                price_dic["gjrw_seat_price"] = data_dic["A6"]
+            # 软卧
+            if("A4" in data_dic.keys()):
+                price_dic["rw_seat_price"] = data_dic["A4"]
+            # 动卧
+            if("F" in data_dic.keys()):
+                price_dic["dw_seat_price"] = data_dic["F"]
+            # 硬卧
+            if("A3" in data_dic.keys()):
+                price_dic["yw_seat_price"] = data_dic["A3"]
+            # 软座
+            if("A2" in data_dic.keys()):
+                price_dic["rz_seat_price"] = data_dic["A2"]
+            # 硬座
+            if("A1" in data_dic.keys()):
+                price_dic["yz_seat_price"] = data_dic["A1"]
+            # 无座
+            if("WZ" in data_dic.keys()):
+                price_dic["wz_seat_price"] = data_dic["WZ"]
         return price_dic
     
     def get_one_price(self, available_train):

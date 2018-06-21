@@ -1,4 +1,9 @@
-from setuptools import setup
+﻿from setuptools import setup
+
+"""
+使用方法
+python setup.py install
+"""
 
 setup(
     name='tickets',
