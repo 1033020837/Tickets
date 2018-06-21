@@ -25,13 +25,18 @@ import requests
 
 from colorama import init, Fore
 
+import gevent
+from urllib.parse import urlencode
+import json
+
+
 init()
 
 class TrainsCollection:
 
-    header = '车次 车站 时间 历时 一等 二等 软卧 硬卧 硬座 无座'.split()
+    header = '车次 车站 时间 历时 商务座 一等 二等 高级软卧 软卧 动卧 硬卧 软座 硬座 无座'.split()
 
-    def __init__(self, available_trains, options):
+    def __init__(self, available_trains, date, options):
         """查询到的火车班次集合
 
         :param available_trains: 一个列表, 包含可获得的火车班次, 每个
@@ -40,6 +45,8 @@ class TrainsCollection:
         """
         self.available_trains = available_trains
         self.options = options
+        self.date = date
+        
 
     def _get_duration(self, raw_train):
         duration = raw_train.get('duration').replace(':', '小时') + '分'
@@ -49,7 +56,6 @@ class TrainsCollection:
             return duration[1:]
         return duration
         
-    @property
     def trains(self):
         for raw_train in self.available_trains:
             train_no = raw_train['train_code']
@@ -62,20 +68,102 @@ class TrainsCollection:
                     '\n'.join([Fore.GREEN + raw_train['start_time'] + Fore.RESET,
                                Fore.RED + raw_train['end_time'] + Fore.RESET]),
                     self._get_duration(raw_train),
-                    raw_train['first_seat'],
-                    raw_train['second_seat'],
-                    raw_train['rw'],
-                    raw_train['yw'],
-                    raw_train['yz'],
-                    raw_train['wz'],
+                    '\n'.join([raw_train['business_seat'],raw_train['business_price']]),                    
+                    '\n'.join([raw_train['first_seat'],raw_train['first_seat_price']] ),
+                    '\n'.join([raw_train['second_seat'],raw_train['second_seat_price']]),
+                    '\n'.join([raw_train['gjrw'],raw_train['gjrw_seat_price']]),                    
+                    '\n'.join([raw_train['rw'],raw_train['rw_seat_price']]),
+                    '\n'.join([raw_train['dw'],raw_train['dw_seat_price']]),                   
+                    '\n'.join([raw_train['yw'],raw_train['yw_seat_price']]),
+                    '\n'.join([raw_train['rz'],raw_train['rz_seat_price']]),
+                    '\n'.join([raw_train['yz'],raw_train['yz_seat_price']]),
+                    '\n'.join([raw_train['wz'],raw_train['wz_seat_price']]),
                 ]
                 yield train
-
+                
+    def get_price(self, train_no, from_station_no, destinction_no, seat_types, date):
+        base_url = "https://kyfw.12306.cn/otn/leftTicket/queryTicketPrice?"
+        parmas = {
+            "train_no": train_no,
+            "from_station_no": from_station_no,
+            "to_station_no": destinction_no,
+            "seat_types": seat_types,
+            "train_date": date
+        }
+        url = base_url + urlencode(parmas)
+        try:
+            data = requests.get(url).text
+        except Exception as e:
+            print("获取票价失败"+"|"+e+"|"+url) 
+        data = json.loads(data)
+        data_dic = data["data"]
+        price_dic = {
+            "business_price": "--",
+            "first_seat_price": "--",
+            "second_seat_price": "--",
+            "gjrw_seat_price": "--",
+            "rw_seat_price": "--",
+            "dw_seat_price": "--",
+            "yw_seat_price": "--",
+            "rz_seat_price": "--",
+            "yz_seat_price": "--",
+            "wz_seat_price": "--"
+        }
+        # 商务座票价
+        if("A9" in data_dic.keys()):
+            price_dic["business_price"] = data_dic["A9"]
+        elif("p" in data_dic.keys()):
+            price_dic["business_price"] = data_dic["p"]
+        # 一等座
+        if("M" in data_dic.keys()):
+            price_dic["first_seat_price"] = data_dic["M"]
+        # 二等座
+        if("O" in data_dic.keys()):
+            price_dic["second_seat_price"] = data_dic["O"]
+        # 高级软卧
+        if("A6" in data_dic.keys()):
+            price_dic["gjrw_seat_price"] = data_dic["A6"]
+        # 软卧
+        if("A4" in data_dic.keys()):
+            price_dic["rw_seat_price"] = data_dic["A4"]
+        # 动卧
+        if("F" in data_dic.keys()):
+            price_dic["dw_seat_price"] = data_dic["F"]
+        # 硬卧
+        if("A3" in data_dic.keys()):
+            price_dic["yw_seat_price"] = data_dic["A3"]
+        # 软座
+        if("A2" in data_dic.keys()):
+            price_dic["rz_seat_price"] = data_dic["A2"]
+        # 硬座
+        if("A1" in data_dic.keys()):
+            price_dic["yz_seat_price"] = data_dic["A1"]
+        # 无座
+        if("WZ" in data_dic.keys()):
+            price_dic["wz_seat_price"] = data_dic["WZ"]
+        return price_dic
+    
+    def get_one_price(self, available_train):
+        # 调用获取票价的函数
+        price_dict = self.get_price(available_train['train_no'] , available_train["from_station_no"] ,
+                               available_train["destinction_no"] , available_train["seat_type"] , self.date)
+        
+        available_train.update(price_dict)   # 更新price_info_dict
+        
+    def add_price(self):
+        tasks = []
+        for available_train in self.available_trains:
+            # 遍历获取每个车次字典,布置为协程任务,把任务加入tasks列表
+            tasks.append(gevent.spawn(self.get_one_price,available_train))
+        # 等待所有任务全部完成,才进行下移步
+        gevent.joinall(tasks)
+    
     def pretty_print(self):
         pt = PrettyTable()
         pt._set_field_names(self.header)
-        for train in self.trains:
-            pt.add_row(train)
+        self.add_price()
+        for train in self.trains():
+            pt.add_row(train)      
         print(pt)
 
 def cli():
@@ -149,7 +237,9 @@ def cli():
             if r_dict[key] == "":
                 r_dict[key] = '--'
         available_trains.append(r_dict)
-    TrainsCollection(available_trains, options).pretty_print()
+    TrainsCollection(available_trains, date, options).pretty_print()
+    
+
     
 if __name__ == '__main__':
     cli()
